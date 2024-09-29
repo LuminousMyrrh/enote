@@ -1,6 +1,6 @@
 ;; enote.el --- Ass
 ;;; Commentary:
-;; idgaf
+;; yo yo yo
 
 ;;; Code:
 
@@ -107,7 +107,7 @@
          (parent-height (frame-height parent))
          (width (min enote-frame-max-width
                       (max enote-frame-min-width
-                           (round (* parent-width 0.2)))))
+                           (round (* parent-width 0.25)))))
          (height (min enote-frame-max-height
                        (max enote-frame-min-height
                             (round (* parent-height 0.2))))))
@@ -145,28 +145,39 @@
 
 (defun enote--find-note ()
   "Find a note based on `called-file-name` and `called-line`.
-Returns the content of the note if found, otherwise returns nil."
+Returns the content of the note and its mode if found, otherwise returns nil."
   (let ((notes (enote--read-note))
         (note-table (make-hash-table :test 'equal)))
     
     (dolist (note notes)
       (let ((file (gethash "file" note))
             (line (gethash "line" note))
-            (content (gethash "content" note)))
-        (puthash (cons file line) content note-table)))
+            (content (gethash "content" note))
+            (mode (gethash "mode" note)))
+        (puthash (cons file line)
+                 `(,content ,mode)
+                 note-table)))
 
     (gethash (cons called-file-name called-line) note-table)))
 
 (defun enote--read-to-buffer (buffer)
   "Read to BUFFER from enote--read-note function."
   (when (buffer-live-p buffer)
-    (let ((note-content (enote--find-note)))
+    (let* ((note-data (enote--find-note))
+           (note-content nil)
+           (note-mode nil))
+      (when note-data
+        (setq note-content (car note-data))
+        (setq note-mode (cadr note-data)))
+
       (with-current-buffer buffer
-        ;; Only erase the buffer if there's content to insert
         (when note-content
           (erase-buffer)
-          (insert note-content))
-        ;; Provide feedback if no note content is found
+          (insert note-content)
+          (when note-mode
+            (funcall (intern note-mode)))
+          (setq-default mode-line-format nil))
+        
         (unless note-content
           (message "New note for line %d" called-line))))))
 
@@ -174,7 +185,11 @@ Returns the content of the note if found, otherwise returns nil."
   "Create a new buffer named BUFFER-NAME and switch to it in PARENT-FRAME."
   (let ((new-buffer (generate-new-buffer buffer-name)))
     (with-current-buffer new-buffer
-      (setq mode-line-format nil
+      (message "Reading to buffer")
+      (enote--read-to-buffer new-buffer)
+      (setq enote-buffer new-buffer))
+
+      (setq-default mode-line-format nil
             header-line-format nil
             tab-line-format nil
             tab-bar-format nil
@@ -183,10 +198,6 @@ Returns the content of the note if found, otherwise returns nil."
             right-fringe-width nil
             left-margin-width 0
             right-margin-width 0)
-
-      (message "Reading to buffer")
-      (enote--read-to-buffer new-buffer)
-      (setq enote-buffer new-buffer))
 
     (with-selected-frame parent-frame
       (switch-to-buffer enote-buffer))))
@@ -197,6 +208,7 @@ Returns the content of the note if found, otherwise returns nil."
   (message "Saving...")
   (let* ((note-content (buffer-string))
          (notes (enote--read-note))
+         (mode-name (symbol-name major-mode))
          (note-exists nil))
     
     (if (or (string= note-content "") (string= called-file-name ""))
@@ -217,6 +229,7 @@ Returns the content of the note if found, otherwise returns nil."
         (when (and (string= (gethash "file" note) called-file-name)
                    (= (gethash "line" note) called-line))
           (setf (gethash "content" note) note-content)
+          (setf (gethash "mode" note) mode-name)
           (setq note-exists t)
           (message "Found existing note for %s at line %d" called-file-name called-line)))
 
@@ -224,6 +237,7 @@ Returns the content of the note if found, otherwise returns nil."
         (let ((new-note (make-hash-table)))
           (setf (gethash "file" new-note) called-file-name)
           (setf (gethash "line" new-note) called-line)
+          (setf (gethash "mode" new-note) mode-name)
           (setf (gethash "content" new-note) note-content)
           (push new-note notes)))
 

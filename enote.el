@@ -248,6 +248,57 @@ Returns the content of the note and its mode if found, otherwise returns nil."
         (write-region (point-min) (point-max) enote-file nil 'quiet))
       (message "Note successfully saved for %s at line %d." called-file-name called-line))))
 
+(defun enote--list-notes ()
+  "List all notes in the enote file."
+  (let ((notes (enote--read-note))
+        (note-list '()))
+    (dolist (note notes)
+      (let ((file (gethash "file" note))
+            (line (gethash "line" note)))
+        (push (format "%s at line %d" file line) note-list)))
+    (if note-list
+        (message "Notes:\n%s" (mapconcat 'identity (nreverse note-list) "\n"))
+      (message "No notes found."))))
+
+(defun enote--delete-note ()
+  "Delete a selected note from the enote file."
+  (interactive)
+  (let ((notes (enote--read-note))
+        selected-note)
+    ;; List notes and prompt user to select one
+    (enote--list-notes)
+    (setq selected-note
+          (completing-read "Select a note to delete: "
+                           (mapcar (lambda (note)
+                                     (format "%s at line %d"
+                                             (gethash "file" note)
+                                             (gethash "line" note)))
+                                   notes)))
+    
+    ;; Extract file and line number from the selected note
+    (when selected-note
+      (let* ((parts (split-string selected-note " at line "))
+             (file-name (car parts))
+             (line-number (string-to-number (cadr parts))))
+        
+        ;; Remove the selected note from the notes list
+        (setq notes
+              (cl-remove-if
+               (lambda (note)
+                 (and
+                  (string= file-name (gethash "file" note))
+                  (= line-number (gethash "line" note))))
+               notes))
+
+        ;; Save updated notes back to the enote file
+        (with-temp-buffer
+          (insert "{\"notes\": ")
+          (insert (json-encode notes))
+          (insert "}")
+          (write-region (point-min) (point-max) enote-file nil 'quiet))
+        ;; Notify user of deletion
+        (message "Deleted note for %s at line %d." file-name line-number)))))
+
 (defun enote--make-frame ()
   "Make frame visible and manage the associated buffer."
   (interactive)
@@ -280,6 +331,7 @@ Returns the content of the note and its mode if found, otherwise returns nil."
     (enote--kill-frame)))
 
 (global-set-key (kbd "C-c c") 'manage-enote-frame)
+(global-set-key (kbd "C-c g") 'enote--delete-note)
 
 (provide 'enote)
 ;;; enote.el ends here

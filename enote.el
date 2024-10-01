@@ -175,8 +175,7 @@ Returns the content of the note and its mode if found, otherwise returns nil."
           (erase-buffer)
           (insert note-content)
           (when note-mode
-            (funcall (intern note-mode)))
-          (setq-default mode-line-format nil))
+            (funcall (intern note-mode))))
         
         (unless note-content
           (message "New note for line %d" called-line))))))
@@ -184,13 +183,8 @@ Returns the content of the note and its mode if found, otherwise returns nil."
 (defun create-enote-buffer (buffer-name parent-frame)
   "Create a new buffer named BUFFER-NAME and switch to it in PARENT-FRAME."
   (let ((new-buffer (generate-new-buffer buffer-name)))
-    (with-current-buffer new-buffer
-      (message "Reading to buffer")
-      (enote--read-to-buffer new-buffer)
-      (setq enote-buffer new-buffer))
-
-      (setq-default mode-line-format nil
-            header-line-format nil
+    (with-selected-frame parent-frame
+      (setq header-line-format nil
             tab-line-format nil
             tab-bar-format nil
             display-line-numbers nil
@@ -198,9 +192,14 @@ Returns the content of the note and its mode if found, otherwise returns nil."
             right-fringe-width nil
             left-margin-width 0
             right-margin-width 0)
-
-    (with-selected-frame parent-frame
+      (with-current-buffer new-buffer
+        (message "Reading to buffer")
+        (enote--read-to-buffer new-buffer)
+        (setq enote-buffer new-buffer)
+        (setq mode-line-format nil))
+      
       (switch-to-buffer enote-buffer))))
+
 
 (defun enote--save-buffer-to-file ()
   "Save the current buffer content as a note in the enote file."

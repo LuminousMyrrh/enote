@@ -201,6 +201,14 @@ Returns the content of the note and its mode if found, otherwise returns nil."
       (switch-to-buffer enote-buffer))))
 
 
+(defun enote--sort-notes (notes)
+  "Sort NOTES based on their line number."
+  (sort notes (lambda (a b)
+                 (let ((line-a (gethash "line" a))
+                       (line-b (gethash "line" b)))
+                   (and line-a line-b
+                        (< line-a line-b))))))
+
 (defun enote--save-buffer-to-file ()
   "Save the current buffer content as a note in the enote file."
   (interactive)
@@ -209,7 +217,7 @@ Returns the content of the note and its mode if found, otherwise returns nil."
          (notes (enote--read-note))
          (mode-name (symbol-name major-mode))
          (note-exists nil))
-    
+
     (if (or (string= note-content "") (string= called-file-name ""))
         (progn
           (if (string= called-file-name "")
@@ -221,9 +229,10 @@ Returns the content of the note and its mode if found, otherwise returns nil."
         (with-temp-buffer
           (insert "{\"notes\": []}")
           (if (write-region (point-min) (point-max) enote-file nil 'quiet)
-              (message "Succesfully created or/and initialized .enote file")
+              (message "Successfully created or/and initialized .enote file")
             (message "Failed to create/initialize .enote file"))))
 
+      ;; Update existing note or add new note
       (dolist (note notes)
         (when (and (string= (gethash "file" note) called-file-name)
                    (= (gethash "line" note) called-line))
@@ -238,14 +247,26 @@ Returns the content of the note and its mode if found, otherwise returns nil."
           (setf (gethash "line" new-note) called-line)
           (setf (gethash "mode" new-note) mode-name)
           (setf (gethash "content" new-note) note-content)
+          ;; Add new note to notes list
           (push new-note notes)))
 
+      ;; Sort notes by line number before saving
+      (setq notes (enote--sort-notes notes))
+
+      ;; Write sorted notes back to the file
       (with-temp-buffer
+        ;; Start JSON format
         (insert "{\"notes\": ")
+        ;; Encode sorted notes to JSON
         (insert (json-encode notes))
+        ;; End JSON format
         (insert "}")
+        ;; Write to file
         (write-region (point-min) (point-max) enote-file nil 'quiet))
+      
+      ;; Confirmation message
       (message "Note successfully saved for %s at line %d." called-file-name called-line))))
+
 
 (defun enote--list-notes ()
   "List all notes in the enote file."
@@ -331,6 +352,59 @@ Returns the content of the note and its mode if found, otherwise returns nil."
 
 (global-set-key (kbd "C-c c") 'manage-enote-frame)
 (global-set-key (kbd "C-c g") 'enote--delete-note)
+
+
+
+;;; ENOTE-LINE
+
+(defun enote--next-note ()
+  "Move to the next line that has a note."
+  (interactive)
+  (let* ((notes (enote--read-note)) ; Read all notes
+         (current-line called-line)
+         (next-line nil))
+    ;; Find the next note
+    (setq next-line
+          (catch 'found
+            (dolist (note notes)
+              (let ((file (gethash "file" note))
+                    (line (gethash "line" note)))
+                (when (and (> line current-line)
+                           (string= file buffer-file-name))
+                  (throw 'found line))))))
+    ;; Move to the next note if found
+    (if next-line
+        (progn
+          (setq called-line next-line)
+          (goto-line next-line) ; Move cursor to the line with the note
+          (message "Moved to next note at line %d" next-line))
+      (message "No more notes found."))))
+
+(defun enote--previous-note ()
+  "Move to the previous line that has a note."
+  (interactive)
+  (let* ((notes (enote--read-note)) ; Read all notes
+         (current-line called-line)
+         (prev-line nil))
+    ;; Find the previous note
+    (setq prev-line
+          (catch 'found
+            (dolist (note notes)
+              (let ((file (gethash "file" note))
+                    (line (gethash "line" note)))
+                (when (and (< line current-line)
+                           (string= file buffer-file-name))
+                  (throw 'found line))))))
+    ;; Move to the previous note if found
+    (if prev-line
+        (progn
+          (setq called-line prev-line)
+          (goto-line prev-line) ; Move cursor to the line with the note
+          (message "Moved to previous note at line %d" prev-line))
+      (message "No previous notes found."))))
+
+(global-set-key (kbd "C-c h") 'enote--next-note)
+(global-set-key (kbd "C-c l") 'enote--previous-note)
 
 (provide 'enote)
 ;;; enote.el ends here

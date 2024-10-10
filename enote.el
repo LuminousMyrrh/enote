@@ -58,8 +58,10 @@
 (eval-when-compile
   (require 'cl-lib))
 
-(defvar called-line 0)
-(defvar called-file-name "")
+(defvar called-line 0
+  "Line from which was called enote")
+(defvar called-file-name ""
+  "File name from which was called enote")
 (defvar enote-file ".enote"
   "The name of the enote file.")
 
@@ -149,15 +151,26 @@ Returns the content of the note and its mode if found, otherwise returns nil."
   (let ((notes (enote--read-note))
         (note-table (make-hash-table :test 'equal)))
     
-    (dolist (note notes)
-      (let ((file (gethash "file" note))
-            (line (gethash "line" note))
-            (content (gethash "content" note))
-            (mode (gethash "mode" note)))
-        (puthash (cons file line)
-                 `(,content ,mode)
-                 note-table)))
+    (message "Looping through the notes")
 
+    (when notes
+      (maphash (lambda (file note-list)
+                 ;; Debugging message for each file in notes
+                 (message "Processing file: %s" file)
+                 ;; Loop through each note in the note list
+                 (dolist (note note-list)
+                   ;; Extract line, content, and mode from each note
+                   (let ((line (gethash "line" note))
+                         (content (gethash "content" note))
+                         (mode (gethash "mode" note)))
+                     ;; Store the note in the note-table using a cons of file and line as key
+                     (puthash (cons file line)
+                              `(,content ,mode)
+                              note-table))))
+               notes))
+
+    ;; Debugging message before returning the result
+    (message "Returning note for %s:%d" called-file-name called-line)
     (gethash (cons called-file-name called-line) note-table)))
 
 (defun enote--read-to-buffer (buffer)
@@ -166,17 +179,23 @@ Returns the content of the note and its mode if found, otherwise returns nil."
     (let* ((note-data (enote--find-note))
            (note-content nil)
            (note-mode nil))
+      ;; Extract content and mode from note-data
+      (message "Extract content and mode from note-data")
       (when note-data
         (setq note-content (car note-data))
         (setq note-mode (cadr note-data)))
 
+      ;; Insert content into the specified buffer
+      (message "Inserting content")
       (with-current-buffer buffer
         (when note-content
           (erase-buffer)
           (insert note-content)
+          ;; Apply mode if specified
           (when note-mode
             (funcall (intern note-mode))))
         
+        ;; Message if no content found for that line
         (unless note-content
           (message "New note for line %d" called-line))))))
 
@@ -200,7 +219,6 @@ Returns the content of the note and its mode if found, otherwise returns nil."
       
       (switch-to-buffer enote-buffer))))
 
-
 (defun enote--sort-notes (notes)
   "Sort NOTES based on their line number."
   (sort notes (lambda (a b)
@@ -216,55 +234,71 @@ Returns the content of the note and its mode if found, otherwise returns nil."
   (let* ((note-content (buffer-string))
          (notes (enote--read-note))
          (mode-name (symbol-name major-mode))
-         (note-exists nil))
+         (note-exists nil)
+         (file-sections-in-notes (if notes
+                                     (gethash called-file-name notes)
+                                   nil)))
 
     (if (or (string= note-content "") (string= called-file-name ""))
-        (progn
-          (if (string= called-file-name "")
-              (message "Cannot create note for an empty buffer.")
-            (message "Buffer content is empty, nothing to save.")))
+        (message (if (string= called-file-name "")
+                    "Cannot create note for an empty buffer."
+                  "Buffer content is empty, nothing to save."))
+      (message "DBG 1")
+
       (when (or (not (file-exists-p enote-file))
                 (= (nth 7 (file-attributes enote-file)) 0))
         (message "Enote file does not exist or is empty. Creating an empty .enote file.")
+
         (with-temp-buffer
-          (insert "{\"notes\": []}")
-          (if (write-region (point-min) (point-max) enote-file nil 'quiet)
-              (message "Successfully created or/and initialized .enote file")
-            (message "Failed to create/initialize .enote file"))))
+          (insert "{\"notes\": {}}")
+          (condition-case err
+              (if (write-region (point-min) (point-max) enote-file nil 'quiet)
+                  (message "Successfully created or initialized .enote file")
+                (message "Failed to create/initialize .enote file"))
+            (error
+            (message "Error in creating/initializing enote file: %s" err)))))
 
-      ;; Update existing note or add new note
-      (dolist (note notes)
-        (when (and (string= (gethash "file" note) called-file-name)
-                   (= (gethash "line" note) called-line))
-          (setf (gethash "content" note) note-content)
-          (setf (gethash "mode" note) mode-name)
-          (setq note-exists t)
-          (message "Found existing note for %s at line %d" called-file-name called-line)))
+      (if file-sections-in-notes
+          (progn
+            (dolist (note file-sections-in-notes)
+              (let ((note-line (gethash "line" note))
+                    (note-content-hash (gethash "content" note))
+                    (note-mode-hash (gethash "mode" note)))
+                (when (= note-line called-line)
+                  (when (not (string= note-content note-content-hash))
+                    (setf (gethash "content" note) note-content)
+                    (message "Content updated"))
+                  (when (not (string= mode-name note-mode-hash))
+                    (setf (gethash "mode" note) mode-name)
+                    (message "Mode updated"))
+                  (setq note-exists t))))
 
-      (unless note-exists
+            (unless note-exists
+              (let ((new-note (make-hash-table)))
+                (message "Creating new note for file: %s" called-file-name)
+                (setf (gethash "line" new-note) called-line
+                      (gethash "mode" new-note) mode-name
+                      (gethash "content" new-note) note-content)
+                (push new-note file-sections-in-notes)
+                (let ((existing-notes (gethash called-file-name notes)))
+                  (unless existing-notes
+                    (setq existing-notes '()))
+                  (push new-note existing-notes)
+                  (puthash called-file-name existing-notes notes)))))
+        (message "File sections doesnt exist creating one")
         (let ((new-note (make-hash-table)))
-          (setf (gethash "file" new-note) called-file-name)
+          (message "S-DBG 1")
           (setf (gethash "line" new-note) called-line)
           (setf (gethash "mode" new-note) mode-name)
           (setf (gethash "content" new-note) note-content)
-          ;; Add new note to notes list
-          (push new-note notes)))
+          (puthash called-file-name (list new-note) notes)))
 
-      ;; Sort notes by line number before saving
-      (setq notes (enote--sort-notes notes))
-
-      ;; Write sorted notes back to the file
       (with-temp-buffer
-        ;; Start JSON format
-        (insert "{\"notes\": ")
-        ;; Encode sorted notes to JSON
+        (insert "{ \"notes\":\n")
         (insert (json-encode notes))
-        ;; End JSON format
         (insert "}")
-        ;; Write to file
         (write-region (point-min) (point-max) enote-file nil 'quiet))
       
-      ;; Confirmation message
       (message "Note successfully saved for %s at line %d." called-file-name called-line))))
 
 
@@ -354,7 +388,6 @@ Returns the content of the note and its mode if found, otherwise returns nil."
 (global-set-key (kbd "C-c g") 'enote--delete-note)
 
 
-
 ;;; ENOTE-LINE
 
 (defun enote--next-note ()
@@ -366,13 +399,13 @@ Returns the content of the note and its mode if found, otherwise returns nil."
     ;; Find the next note
     (setq next-line
           (catch 'found
-            (dolist (note notes)
-              (let ((file (gethash "file" note))
-                    (line (gethash "line" note)))
-                (when (and (> line current-line)
-                           (string= file buffer-file-name))
-                  (throw 'found line))))))
-    ;; Move to the next note if found
+            (maphash (lambda (file note-list)
+                         (dolist (note note-list)
+                           (let ((line (gethash "line" note)))
+                             (when (and (> line current-line)
+                                        (string= file buffer-file-name))
+                               (throw 'found line)))))
+                     notes)))
     (if next-line
         (progn
           (setq called-line next-line)
@@ -389,12 +422,13 @@ Returns the content of the note and its mode if found, otherwise returns nil."
     ;; Find the previous note
     (setq prev-line
           (catch 'found
-            (dolist (note notes)
-              (let ((file (gethash "file" note))
-                    (line (gethash "line" note)))
-                (when (and (< line current-line)
-                           (string= file buffer-file-name))
-                  (throw 'found line))))))
+            (maphash (lambda (file note-list)
+                         (dolist (note note-list)
+                           (let ((line (gethash "line" note)))
+                             (when (and (< line current-line)
+                                        (string= file buffer-file-name))
+                               (throw 'found line)))))
+                     notes)))
     ;; Move to the previous note if found
     (if prev-line
         (progn

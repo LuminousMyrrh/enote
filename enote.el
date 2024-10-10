@@ -79,7 +79,7 @@
     (when current-file
         (setq called-file-name current-file))))
 
-(defun calculate-cursor-position ()
+(defun calculate-frame-position ()
   "Calculate the position of the cursor in pixel coordinates."
   (let* ((cursor-pos (posn-x-y (posn-at-point)))
          (edge (window-inside-pixel-edges))
@@ -88,15 +88,6 @@
          (y (+ (cadr edge) (+ (or (cdr cursor-pos) 0) border))))
     (cons x (+ y 20))))
 
-(defun update-enote-frame-size ()
-  "Update the size of the enote frame based on the current window size."
-  (when enote-frame
-    (let* ((window-width (window-width))
-           (window-height (window-height))
-           (new-width (max enote-frame-min-width (min window-width enote-frame-max-width)))
-           (new-height (max enote-frame-min-height (min window-height enote-frame-max-height))))
-      (set-frame-size enote-frame new-width new-height))))
-
 (defun create-enote-frame ()
   "Create an empty enote frame."
   (interactive)
@@ -104,22 +95,23 @@
   (get-line-and-file-name)
 
   (let* ((parent (selected-frame))
-         (cursor-pos (calculate-cursor-position))
+         (frame-pos (calculate-frame-position))
          (parent-width (frame-width parent))
          (parent-height (frame-height parent))
+
          (width (min enote-frame-max-width
                       (max enote-frame-min-width
                            (round (* parent-width 0.25)))))
          (height (min enote-frame-max-height
                        (max enote-frame-min-height
-                            (round (* parent-height 0.2))))))
+                            (round (* parent-height 0.25))))))
     (let ((frame
            (make-frame `((parent-frame . ,parent)
                          ,@frame-parameters
                          (width . ,width)
                          (height . ,height)
-                         (top . ,(cdr cursor-pos))
-                         (left . ,(car cursor-pos))))))
+                         (top . ,(cdr frame-pos))
+                         (left . ,(car frame-pos))))))
       (when frame
         (setq enote-frame frame)
         (setq-default cursor-type 'box)

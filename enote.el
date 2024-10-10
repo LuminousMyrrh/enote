@@ -215,6 +215,11 @@ Returns the content of the note and its mode if found, otherwise returns nil."
                    (and line-a line-b
                         (< line-a line-b))))))
 
+(defun create-new-note (new-note)
+  (setf (gethash "line" new-note) called-line
+        (gethash "mode" new-note) mode-name
+        (gethash "content" new-note) note-content))
+
 (defun enote--save-buffer-to-file ()
   "Save the current buffer content as a note in the enote file."
   (interactive)
@@ -231,7 +236,6 @@ Returns the content of the note and its mode if found, otherwise returns nil."
         (message (if (string= called-file-name "")
                     "Cannot create note for an empty buffer."
                   "Buffer content is empty, nothing to save."))
-      (message "DBG 1")
 
       (when (or (not (file-exists-p enote-file))
                 (= (nth 7 (file-attributes enote-file)) 0))
@@ -246,6 +250,8 @@ Returns the content of the note and its mode if found, otherwise returns nil."
             (error
               (message "Error in creating/initializing enote file: %s" err)))))
 
+      (unless notes
+        (setq notes (enote--read-note)))
       (if file-sections-in-notes
           (progn
             (dolist (note file-sections-in-notes)
@@ -264,17 +270,12 @@ Returns the content of the note and its mode if found, otherwise returns nil."
             (unless note-exists
               (let ((new-note (make-hash-table)))
                 (message "Creating new note for file: %s" called-file-name)
-                (setf (gethash "line" new-note) called-line
-                      (gethash "mode" new-note) mode-name
-                      (gethash "content" new-note) note-content)
+                (create-new-note new-note)
                 (push new-note file-sections-in-notes)
                 (puthash called-file-name file-sections-in-notes notes))))
         (message "File sections doesnt exist creating one")
         (let ((new-note (make-hash-table)))
-          (message "S-DBG 1")
-          (setf (gethash "line" new-note) called-line)
-          (setf (gethash "mode" new-note) mode-name)
-          (setf (gethash "content" new-note) note-content)
+          (create-new-note new-note)
           (puthash called-file-name (list new-note) notes)))
 
       (with-temp-buffer

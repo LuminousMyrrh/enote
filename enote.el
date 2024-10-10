@@ -179,23 +179,19 @@ Returns the content of the note and its mode if found, otherwise returns nil."
     (let* ((note-data (enote--find-note))
            (note-content nil)
            (note-mode nil))
-      ;; Extract content and mode from note-data
       (message "Extract content and mode from note-data")
       (when note-data
         (setq note-content (car note-data))
         (setq note-mode (cadr note-data)))
 
-      ;; Insert content into the specified buffer
       (message "Inserting content")
       (with-current-buffer buffer
         (when note-content
           (erase-buffer)
           (insert note-content)
-          ;; Apply mode if specified
           (when note-mode
             (funcall (intern note-mode))))
         
-        ;; Message if no content found for that line
         (unless note-content
           (message "New note for line %d" called-line))))))
 
@@ -256,7 +252,7 @@ Returns the content of the note and its mode if found, otherwise returns nil."
                   (message "Successfully created or initialized .enote file")
                 (message "Failed to create/initialize .enote file"))
             (error
-            (message "Error in creating/initializing enote file: %s" err)))))
+              (message "Error in creating/initializing enote file: %s" err)))))
 
       (if file-sections-in-notes
           (progn
@@ -280,11 +276,7 @@ Returns the content of the note and its mode if found, otherwise returns nil."
                       (gethash "mode" new-note) mode-name
                       (gethash "content" new-note) note-content)
                 (push new-note file-sections-in-notes)
-                (let ((existing-notes (gethash called-file-name notes)))
-                  (unless existing-notes
-                    (setq existing-notes '()))
-                  (push new-note existing-notes)
-                  (puthash called-file-name existing-notes notes)))))
+                (puthash called-file-name file-sections-in-notes notes))))
         (message "File sections doesnt exist creating one")
         (let ((new-note (make-hash-table)))
           (message "S-DBG 1")
@@ -296,7 +288,7 @@ Returns the content of the note and its mode if found, otherwise returns nil."
       (with-temp-buffer
         (insert "{ \"notes\":\n")
         (insert (json-encode notes))
-        (insert "}")
+        (insert "\n}")
         (write-region (point-min) (point-max) enote-file nil 'quiet))
       
       (message "Note successfully saved for %s at line %d." called-file-name called-line))))

@@ -369,8 +369,8 @@ Returns the content of the note and its mode if found, otherwise returns nil."
 ;;; ENOTE-LINE
 
 (defun enote--next-note ()
-  "Move to the next line that has a note."
   (interactive)
+  "Move to the next line that has a note."
   (let* ((notes (enote--read-note)) ; Read all notes
          (current-line (line-number-at-pos))
          (next-line nil))

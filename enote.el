@@ -143,13 +143,8 @@ Returns the content of the note and its mode if found, otherwise returns nil."
   (let ((notes (enote--read-note))
         (note-table (make-hash-table :test 'equal)))
     
-    (message "Looping through the notes")
-
     (when notes
       (maphash (lambda (file note-list)
-                 ;; Debugging message for each file in notes
-                 (message "Processing file: %s" file)
-                 ;; Loop through each note in the note list
                  (dolist (note note-list)
                    ;; Extract line, content, and mode from each note
                    (let ((line (gethash "line" note))
@@ -161,8 +156,6 @@ Returns the content of the note and its mode if found, otherwise returns nil."
                               note-table))))
                notes))
 
-    ;; Debugging message before returning the result
-    (message "Returning note for %s:%d" called-file-name called-line)
     (gethash (cons called-file-name called-line) note-table)))
 
 (defun enote--read-to-buffer (buffer)
@@ -171,12 +164,10 @@ Returns the content of the note and its mode if found, otherwise returns nil."
     (let* ((note-data (enote--find-note))
            (note-content nil)
            (note-mode nil))
-      (message "Extract content and mode from note-data")
       (when note-data
         (setq note-content (car note-data))
         (setq note-mode (cadr note-data)))
 
-      (message "Inserting content")
       (with-current-buffer buffer
         (when note-content
           (erase-buffer)
@@ -200,7 +191,6 @@ Returns the content of the note and its mode if found, otherwise returns nil."
             left-margin-width 0
             right-margin-width 0)
       (with-current-buffer new-buffer
-        (message "Reading to buffer")
         (enote--read-to-buffer new-buffer)
         (setq enote-buffer new-buffer)
         (setq mode-line-format nil))
@@ -209,6 +199,7 @@ Returns the content of the note and its mode if found, otherwise returns nil."
 
 (defun enote--sort-notes (notes)
   "Sort NOTES based on their line number."
+  (message "Sorting...")
   (sort notes (lambda (a b)
                  (let ((line-a (gethash "line" a))
                        (line-b (gethash "line" b)))
@@ -252,6 +243,7 @@ Returns the content of the note and its mode if found, otherwise returns nil."
 
       (unless notes
         (setq notes (enote--read-note)))
+
       (if file-sections-in-notes
           (progn
             (dolist (note file-sections-in-notes)
@@ -273,11 +265,12 @@ Returns the content of the note and its mode if found, otherwise returns nil."
                 (create-new-note new-note)
                 (push new-note file-sections-in-notes)
                 (puthash called-file-name file-sections-in-notes notes))))
-        (message "File sections doesnt exist creating one")
+        (message "File sections doesnt exist, creating one")
         (let ((new-note (make-hash-table)))
           (create-new-note new-note)
           (puthash called-file-name (list new-note) notes)))
 
+      (enote--sort-notes (gethash called-file-name notes))
       (with-temp-buffer
         (insert "{ \"notes\":\n")
         (insert (json-encode notes))
@@ -379,9 +372,8 @@ Returns the content of the note and its mode if found, otherwise returns nil."
   "Move to the next line that has a note."
   (interactive)
   (let* ((notes (enote--read-note)) ; Read all notes
-         (current-line called-line)
+         (current-line (line-number-at-pos))
          (next-line nil))
-    ;; Find the next note
     (setq next-line
           (catch 'found
             (maphash (lambda (file note-list)
@@ -394,33 +386,29 @@ Returns the content of the note and its mode if found, otherwise returns nil."
     (if next-line
         (progn
           (setq called-line next-line)
-          (goto-line next-line) ; Move cursor to the line with the note
-          (message "Moved to next note at line %d" next-line))
-      (message "No more notes found."))))
+          (goto-line next-line))
+      (message "No next note" next-line))))
 
 (defun enote--previous-note ()
   "Move to the previous line that has a note."
   (interactive)
   (let* ((notes (enote--read-note)) ; Read all notes
-         (current-line called-line)
+         (current-line (line-number-at-pos))
          (prev-line nil))
-    ;; Find the previous note
     (setq prev-line
           (catch 'found
             (maphash (lambda (file note-list)
-                         (dolist (note note-list)
+                         (dolist (note (reverse note-list))
                            (let ((line (gethash "line" note)))
                              (when (and (< line current-line)
                                         (string= file buffer-file-name))
                                (throw 'found line)))))
                      notes)))
-    ;; Move to the previous note if found
     (if prev-line
         (progn
           (setq called-line prev-line)
-          (goto-line prev-line) ; Move cursor to the line with the note
-          (message "Moved to previous note at line %d" prev-line))
-      (message "No previous notes found."))))
+          (goto-line prev-line))
+      (message "No previous note"))))
 
 (global-set-key (kbd "C-c h") 'enote--next-note)
 (global-set-key (kbd "C-c l") 'enote--previous-note)

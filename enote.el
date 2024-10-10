@@ -4,6 +4,11 @@
 
 ;;; Code:
 
+(defcustom enote-open-on-jump nil
+  "User-defined bool to open frame when jump to note"
+  :type 'bool
+  :group 'props)
+
 (defcustom enote-frame-background-color "black"
   "User-defined background color for the frame."
   :type 'string
@@ -242,7 +247,8 @@ Returns the content of the note and its mode if found, otherwise returns nil."
               (message "Error in creating/initializing enote file: %s" err)))))
 
       (unless notes
-        (setq notes (enote--read-note)))
+        (setq notes (enote--read-note))
+        (enote--sort-notes (gethash called-file-name notes)))
 
       (if file-sections-in-notes
           (progn
@@ -279,57 +285,65 @@ Returns the content of the note and its mode if found, otherwise returns nil."
       
       (message "Note successfully saved for %s at line %d." called-file-name called-line))))
 
-
-(defun enote--list-notes ()
-  "List all notes in the enote file."
-  (let ((notes (enote--read-note))
-        (note-list '()))
-    (dolist (note notes)
-      (let ((file (gethash "file" note))
-            (line (gethash "line" note)))
-        (push (format "%s at line %d" file line) note-list)))
-    (if note-list
-        (message "Notes:\n%s" (mapconcat 'identity (nreverse note-list) "\n"))
-      (message "No notes found."))))
-
 (defun enote--delete-note ()
-  "Delete a selected note from the enote file."
+  "Delete a note from the enote file by prompting the user to choose which note to delete."
   (interactive)
-  (let ((notes (enote--read-note))
-        selected-note)
-    ;; List notes and prompt user to select one
-    (enote--list-notes)
-    (setq selected-note
-          (completing-read "Select a note to delete: "
-                           (mapcar (lambda (note)
-                                     (format "%s at line %d"
-                                             (gethash "file" note)
-                                             (gethash "line" note)))
-                                   notes)))
-    
-    ;; Extract file and line number from the selected note
-    (when selected-note
-      (let* ((parts (split-string selected-note " at line "))
-             (file-name (car parts))
-             (line-number (string-to-number (cadr parts))))
-        
-        ;; Remove the selected note from the notes list
-        (setq notes
-              (cl-remove-if
-               (lambda (note)
-                 (and
-                  (string= file-name (gethash "file" note))
-                  (= line-number (gethash "line" note))))
-               notes))
+  (message "Deleting...")
+  (let* ((notes (enote--read-note))
+         (file-sections-in-notes (if notes
+                                     (gethash called-file-name notes)
+                                   nil))
+         (note-exists nil))
 
-        ;; Save updated notes back to the enote file
+    (if (string= called-file-name "")
+        (message "Cannot delete note for an empty buffer.")
+      
+      (if (not notes)
+          (message "No notes found to delete.")
+        
+        ;; Check if there are any notes for the current file
+        (if file-sections-in-notes
+            (let ((note-names (mapcar (lambda (note)
+                                         (format "Line %d: %s" 
+                                                 (gethash "line" note) 
+                                                 (gethash "content" note)))
+                                       file-sections-in-notes))
+                  ;; Prompt user to select a note to delete
+                  (selected-note nil))
+              ;; Ask user to choose a note to delete
+              (setq selected-note 
+                    (completing-read "Select a note to delete: " note-names nil t))
+
+              ;; Find and delete the selected note
+              (dolist (note file-sections-in-notes)
+                (when (string= selected-note 
+                               (format "Line %d: %s" 
+                                       (gethash "line" note) 
+                                       (gethash "content" note)))
+                  ;; Remove the note from the list
+                  (setq file-sections-in-notes 
+                        (delete note file-sections-in-notes))
+                  (setq note-exists t)
+                  ;; Notify user of deletion
+                  (message "Deleted: %s" selected-note))))
+
+          ;; If no notes were found, notify the user
+          (unless note-exists
+            (message "No matching note found to delete.")))
+
+        ;; Update the notes hash table
+        (puthash called-file-name file-sections-in-notes notes)
+
+        ;; Write updated notes back to the enote file
         (with-temp-buffer
-          (insert "{\"notes\": ")
+          (insert "{ \"notes\":\n")
           (insert (json-encode notes))
-          (insert "}")
+          (insert "\n}")
           (write-region (point-min) (point-max) enote-file nil 'quiet))
-        ;; Notify user of deletion
-        (message "Deleted note for %s at line %d." file-name line-number)))))
+        
+        ;; Notify user of successful deletion if applicable
+        (when note-exists
+          (message "Notes successfully updated after deletion for %s." called-file-name))))))
 
 (defun enote--make-frame ()
   "Make frame visible and manage the associated buffer."
@@ -374,20 +388,24 @@ Returns the content of the note and its mode if found, otherwise returns nil."
   (let* ((notes (enote--read-note)) ; Read all notes
          (current-line (line-number-at-pos))
          (next-line nil))
-    (setq next-line
-          (catch 'found
-            (maphash (lambda (file note-list)
-                         (dolist (note note-list)
-                           (let ((line (gethash "line" note)))
-                             (when (and (> line current-line)
-                                        (string= file buffer-file-name))
-                               (throw 'found line)))))
-                     notes)))
-    (if next-line
-        (progn
-          (setq called-line next-line)
-          (goto-line next-line))
-      (message "No next note" next-line))))
+    (when notes
+      (setq next-line
+            (catch 'found
+              (maphash (lambda (file note-list)
+                          (dolist (note note-list)
+                            (let ((line (gethash "line" note)))
+                              (when (and (> line current-line)
+                                          (string= file buffer-file-name))
+                                (throw 'found line)))))
+                      notes)))
+      (if next-line
+          (progn
+            (setq called-line next-line)
+            (goto-line next-line)
+            (when enote-open-on-jump
+              (get-line-and-file-name)
+              (manage-enote-frame)))
+        (message "No next note" next-line)))))
 
 (defun enote--previous-note ()
   "Move to the previous line that has a note."
@@ -395,20 +413,24 @@ Returns the content of the note and its mode if found, otherwise returns nil."
   (let* ((notes (enote--read-note)) ; Read all notes
          (current-line (line-number-at-pos))
          (prev-line nil))
-    (setq prev-line
-          (catch 'found
-            (maphash (lambda (file note-list)
-                         (dolist (note (reverse note-list))
-                           (let ((line (gethash "line" note)))
-                             (when (and (< line current-line)
-                                        (string= file buffer-file-name))
-                               (throw 'found line)))))
-                     notes)))
-    (if prev-line
-        (progn
-          (setq called-line prev-line)
-          (goto-line prev-line))
-      (message "No previous note"))))
+    (when notes
+      (setq prev-line
+            (catch 'found
+              (maphash (lambda (file note-list)
+                          (dolist (note (reverse note-list))
+                            (let ((line (gethash "line" note)))
+                              (when (and (< line current-line)
+                                          (string= file buffer-file-name))
+                                (throw 'found line)))))
+                      notes)))
+      (if prev-line
+          (progn
+            (setq called-line prev-line)
+            (goto-line prev-line)
+            (when enote-open-on-jump
+              (get-line-and-file-name)
+              (manage-enote-frame)))
+        (message "No previous note")))))
 
 (global-set-key (kbd "C-c h") 'enote--next-note)
 (global-set-key (kbd "C-c l") 'enote--previous-note)

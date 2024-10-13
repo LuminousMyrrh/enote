@@ -388,25 +388,26 @@ Returns the content of the note and its mode if found, otherwise returns nil."
   (let* ((notes (enote--read-note)) ; Read all notes
          (current-line (line-number-at-pos))
          (next-line nil))
-    (when notes
-      (setq next-line
-            (catch 'found
-              (maphash (lambda (file note-list)
-                          (dolist (note note-list)
-                            (let ((line (gethash "line" note)))
-                              (when (and (> line current-line)
-                                          (string= file buffer-file-name))
-                                (throw 'found line)))))
-                      notes)))
-      (if next-line
-          (progn
-            (setq called-line next-line)
-            (goto-line next-line)
-            (when enote-open-on-jump
-              (get-line-and-file-name)
-              (manage-enote-frame)))
-        (message "No next note" next-line))))
-  (message "No notes for this file"))
+    (if notes
+        (progn
+          (setq next-line
+                (catch 'found
+                  (maphash (lambda (file note-list)
+                              (dolist (note note-list)
+                                (let ((line (gethash "line" note)))
+                                  (when (and (> line current-line)
+                                              (string= file buffer-file-name))
+                                    (throw 'found line)))))
+                          notes)))
+          (if next-line
+              (progn
+                (setq called-line next-line)
+                (goto-line next-line)
+                (when enote-open-on-jump
+                  (get-line-and-file-name)
+                  (manage-enote-frame)))
+            (message "No next note" next-line)))
+      (message "No notes for this file"))))
 
 (defun enote--previous-note ()
   "Move to the previous line that has a note."
@@ -414,25 +415,26 @@ Returns the content of the note and its mode if found, otherwise returns nil."
   (let* ((notes (enote--read-note)) ; Read all notes
          (current-line (line-number-at-pos))
          (prev-line nil))
-    (when notes
-      (setq prev-line
-            (catch 'found
-              (maphash (lambda (file note-list)
-                          (dolist (note (reverse note-list))
-                            (let ((line (gethash "line" note)))
-                              (when (and (< line current-line)
-                                          (string= file buffer-file-name))
-                                (throw 'found line)))))
-                      notes)))
-      (if prev-line
-          (progn
-            (setq called-line prev-line)
-            (goto-line prev-line)
-            (when enote-open-on-jump
-              (get-line-and-file-name)
-              (manage-enote-frame)))
-        (message "No previous note"))))
-  (message "No notes for this file"))
+    (if notes
+        (progn
+          (setq prev-line
+                (catch 'found
+                  (maphash (lambda (file note-list)
+                              (dolist (note (reverse note-list))
+                                (let ((line (gethash "line" note)))
+                                  (when (and (< line current-line)
+                                              (string= file buffer-file-name))
+                                    (throw 'found line)))))
+                          notes)))
+          (if prev-line
+              (progn
+                (setq called-line prev-line)
+                (goto-line prev-line)
+                (when enote-open-on-jump
+                  (get-line-and-file-name)
+                  (manage-enote-frame)))
+            (message "No previous note")))
+      (message "No notes for this file"))))
 
 (global-set-key (kbd "C-c h") 'enote--next-note)
 (global-set-key (kbd "C-c l") 'enote--previous-note)

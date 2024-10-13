@@ -405,7 +405,8 @@ Returns the content of the note and its mode if found, otherwise returns nil."
             (when enote-open-on-jump
               (get-line-and-file-name)
               (manage-enote-frame)))
-        (message "No next note" next-line)))))
+        (message "No next note" next-line))))
+  (message "No notes for this file"))
 
 (defun enote--previous-note ()
   "Move to the previous line that has a note."
@@ -430,7 +431,8 @@ Returns the content of the note and its mode if found, otherwise returns nil."
             (when enote-open-on-jump
               (get-line-and-file-name)
               (manage-enote-frame)))
-        (message "No previous note")))))
+        (message "No previous note"))))
+  (message "No notes for this file"))
 
 (global-set-key (kbd "C-c h") 'enote--next-note)
 (global-set-key (kbd "C-c l") 'enote--previous-note)

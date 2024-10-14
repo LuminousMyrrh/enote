@@ -16,7 +16,7 @@
 
 1. Clone the repository:
   ```bash
-  git clone <repository-url>
+  git clone https://github.com/LuminousMyrrh/enote/
   ```
 2. Add 'enote.el' to your Emacs load path.
 3. Require the package in your Emacs configuration:
@@ -25,7 +25,7 @@
   ```
     
 ## Key Bindings
-   - C-c c: Toggle the visibility of the note frame.
+   - C-c c: Toggle enote.
    - C-c g: Delete a selected note.
    - C-c h: Jump to the next note.
    - C-c l: Jump to the previous note.
